@@ -27,9 +27,6 @@ town.claim_paused: "&eEnemy player entered the chunk, claim paused!"
 town.claim_resumed: "&aClaim resumed!"
 
 # Market Messages
-market.created: "&aMarket &e{0}&a created successfully!"
-market.deleted: "&cMarket &e{0}&c has been deleted"
-market.not_in_town: "&cYou must be in a town to create a market!"
 market.no_permission: "&cYou don't have permission to manage this market!"
 market.no_nation: "&cYour town must be part of a nation!"
 market.already_exists: "&cA market already exists in this chunk!"
