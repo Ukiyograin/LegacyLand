@@ -56,9 +56,16 @@ public class MySQLDatabase implements IDatabase {
             dataSource = new HikariDataSource(config);
             LegacyLand.logger.info("MySQL 数据库连接成功！");
             createTables();
+            // 自动迁移数据库结构
+            try (Connection conn = dataSource.getConnection()) {
+                new DatabaseMigration(conn, "mysql").migrate();
+            }
         } catch (Exception e) {
             getLogger().severe("MySQL 数据库连接失败: " + e.getMessage());
-            getLogger().severe(e.getCause().toString());
+            if (e.getCause() != null) {
+                getLogger().severe("原因: " + e.getCause().toString());
+            }
+            e.printStackTrace();
         }
     }
 
@@ -222,6 +229,32 @@ public class MySQLDatabase implements IDatabase {
                     "INDEX idx_chunk_world (world)" +
                     ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
+            // 市场数据表
+            String marketsTable = "CREATE TABLE IF NOT EXISTS markets (" +
+                    "id VARCHAR(36) PRIMARY KEY," +
+                    "nation_name VARCHAR(255) NOT NULL," +
+                    "world VARCHAR(64) NOT NULL," +
+                    "chunk_x INT NOT NULL," +
+                    "chunk_z INT NOT NULL," +
+                    "approved_by VARCHAR(36) NOT NULL," +
+                    "created_at BIGINT NOT NULL" +
+                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+            // 市场箱子表
+            String marketChestsTable = "CREATE TABLE IF NOT EXISTS market_chests (" +
+                    "id VARCHAR(36) PRIMARY KEY," +
+                    "market_id VARCHAR(36) NOT NULL," +
+                    "world VARCHAR(64) NOT NULL," +
+                    "x INT NOT NULL," +
+                    "y INT NOT NULL," +
+                    "z INT NOT NULL," +
+                    "owner_uuid VARCHAR(36) NOT NULL," +
+                    "price_per_item DOUBLE DEFAULT 0," +
+                    "price_set INT DEFAULT 0," +
+                    "created_at BIGINT NOT NULL," +
+                    "INDEX idx_market_chests_market (market_id)" +
+                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(nationExtTable);
                 stmt.execute(playerRolesTable);
@@ -235,6 +268,8 @@ public class MySQLDatabase implements IDatabase {
                 stmt.execute(flagWarsTable);
                 stmt.execute(guaranteeRelationsTable);
                 stmt.execute(chunkResourceTable);
+                stmt.execute(marketsTable);
+                stmt.execute(marketChestsTable);
                 LegacyLand.logger.info("MySQL 数据库表创建成功！");
             }
         } catch (SQLException e) {
@@ -361,10 +396,14 @@ public class MySQLDatabase implements IDatabase {
 
     @Override
     public void deleteNationData(String nationName) {
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("DELETE FROM nation_extensions WHERE nation_name = '" + nationName + "'");
-            stmt.execute("DELETE FROM player_roles WHERE nation_name = '" + nationName + "'");
+        try (Connection conn = getConnection()) {
+            try (PreparedStatement pstmt1 = conn.prepareStatement("DELETE FROM nation_extensions WHERE nation_name = ?");
+                 PreparedStatement pstmt2 = conn.prepareStatement("DELETE FROM player_roles WHERE nation_name = ?")) {
+                pstmt1.setString(1, nationName);
+                pstmt1.executeUpdate();
+                pstmt2.setString(1, nationName);
+                pstmt2.executeUpdate();
+            }
         } catch (SQLException e) {
             LegacyLand.logger.severe("删除国家数据失败: " + e.getMessage());
         }
