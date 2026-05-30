@@ -9,6 +9,7 @@ import net.chen.legacyLand.nation.diplomacy.DiplomacyRelation;
 import net.chen.legacyLand.nation.diplomacy.RelationType;
 import net.chen.legacyLand.player.PlayerData;
 import net.chen.legacyLand.player.Profession;
+import net.chen.legacyLand.resource.pricing.ChunkResourceData;
 
 import java.sql.*;
 import java.util.*;
@@ -37,10 +38,12 @@ public class MySQLDatabase implements IDatabase {
             String username = plugin.getConfig().getString("database.mysql.username", "root");
             String password = plugin.getConfig().getString("database.mysql.password", "password");
 
+            // 手动加载驱动，确保 HikariCP 的 ClassLoader 能找到 Shadow 重定向后的驱动类
+            Class.forName("net.chen.legacyLand.libs.mysql.cj.jdbc.Driver", true, getClass().getClassLoader());
+
             config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=false&serverTimezone=UTC&characterEncoding=utf8");
             config.setUsername(username);
             config.setPassword(password);
-            config.setDriverClassName("com.mysql.cj.jdbc.Driver");
 
             // 连接池配置
             config.setMaximumPoolSize(plugin.getConfig().getInt("database.mysql.pool.maximum-pool-size", 10));
@@ -396,14 +399,15 @@ public class MySQLDatabase implements IDatabase {
 
     @Override
     public void deleteNationData(String nationName) {
-        try (Connection conn = getConnection()) {
-            try (PreparedStatement pstmt1 = conn.prepareStatement("DELETE FROM nation_extensions WHERE nation_name = ?");
-                 PreparedStatement pstmt2 = conn.prepareStatement("DELETE FROM player_roles WHERE nation_name = ?")) {
-                pstmt1.setString(1, nationName);
-                pstmt1.executeUpdate();
-                pstmt2.setString(1, nationName);
-                pstmt2.executeUpdate();
-            }
+        String sql1 = "DELETE FROM nation_extensions WHERE nation_name = ?";
+        String sql2 = "DELETE FROM player_roles WHERE nation_name = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt1 = conn.prepareStatement(sql1);
+             PreparedStatement pstmt2 = conn.prepareStatement(sql2)) {
+            pstmt1.setString(1, nationName);
+            pstmt1.executeUpdate();
+            pstmt2.setString(1, nationName);
+            pstmt2.executeUpdate();
         } catch (SQLException e) {
             LegacyLand.logger.severe("删除国家数据失败: " + e.getMessage());
         }
@@ -1122,7 +1126,7 @@ public class MySQLDatabase implements IDatabase {
     // ========== 区块资源储量（P1 普查） ==========
 
     @Override
-    public void saveChunkResource(net.chen.legacyLand.resource.pricing.ChunkResourceData data) {
+    public void saveChunkResource(ChunkResourceData data) {
         String sql = "INSERT INTO chunk_resources " +
                 "(world, chunk_x, chunk_z, biome, initial_value, current_value, biome_factor, last_scan) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
@@ -1145,7 +1149,7 @@ public class MySQLDatabase implements IDatabase {
     }
 
     @Override
-    public net.chen.legacyLand.resource.pricing.ChunkResourceData loadChunkResource(String world, int chunkX, int chunkZ) {
+    public ChunkResourceData loadChunkResource(String world, int chunkX, int chunkZ) {
         String sql = "SELECT biome, initial_value, current_value, biome_factor, last_scan " +
                 "FROM chunk_resources WHERE world = ? AND chunk_x = ? AND chunk_z = ?";
         try (Connection conn = getConnection();
@@ -1171,7 +1175,7 @@ public class MySQLDatabase implements IDatabase {
     }
 
     @Override
-    public java.util.List<net.chen.legacyLand.resource.pricing.ChunkResourceData> loadAllChunkResources() {
+    public List<ChunkResourceData> loadAllChunkResources() {
         java.util.List<net.chen.legacyLand.resource.pricing.ChunkResourceData> list = new java.util.ArrayList<>();
         String sql = "SELECT world, chunk_x, chunk_z, biome, initial_value, current_value, biome_factor, last_scan FROM chunk_resources";
         try (Connection conn = getConnection();
